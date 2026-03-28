@@ -191,7 +191,7 @@ echo "✅ IPv4 DNS fix applied"
 echo ""
 echo "📦 Step 4/5: Installing OpenClaw. This takes a few minutes..."
 
-curl -sL myopenclawhub.com/install | bash && source ~/.bashrc 2>/dev/null
+bash -c "$(curl -sSL https://myopenclawhub.com/install)" < /dev/tty && source ~/.bashrc 2>/dev/null
 
 # =========================================================================
 # Step 5/5: Inject Shizuku Phone Control Scripts & AI Override
