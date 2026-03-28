@@ -110,18 +110,27 @@ fi
 bash "$SHIZUKU_DIR/copy.sh"
 
 echo "🧪 Testing Shizuku terminal access..."
-if ! rish -c "whoami" > /dev/null 2>&1; then
+SHIZUKU_OK=false
+if timeout 10 rish -c "whoami" > /dev/null 2>&1; then
+    SHIZUKU_OK=true
+else
     echo "🔄 Establishing Shizuku loopback connection..."
     shizuku > /dev/null 2>&1
     sleep 2
-    if ! rish -c "whoami" > /dev/null 2>&1; then
-        echo "❌ ERROR: Shizuku is not responding!"
-        echo "Please check the Shizuku app to ensure it says 'Shizuku is running' and try again."
-        exit 1
+    if timeout 10 rish -c "whoami" > /dev/null 2>&1; then
+        SHIZUKU_OK=true
     fi
 fi
 
-echo "✅ Shizuku 'rish' and 'shizuku' commands successfully verified!"
+if [ "$SHIZUKU_OK" = true ]; then
+    echo "✅ Shizuku 'rish' and 'shizuku' commands successfully verified!"
+else
+    echo "⚠️  WARNING: Shizuku is not responding right now."
+    echo "   This is OK — the rest of the setup will continue."
+    echo "   After setup completes, make sure Shizuku app says 'Shizuku is running',"
+    echo "   then run: shizuku"
+    echo "   Then test with: rish -c whoami"
+fi
 
 # 3. Fix Node.js IPv4 DNS (Crucial for Termux)
 echo ""
