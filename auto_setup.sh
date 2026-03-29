@@ -189,9 +189,13 @@ echo "✅ IPv4 DNS fix applied"
 # Step 4/5: Install Official OpenClaw
 # =========================================================================
 echo ""
-echo "📦 Step 4/5: Installing OpenClaw. This takes a few minutes..."
 
-bash -c "$(curl -sSL https://myopenclawhub.com/install)" < /dev/tty && source ~/.bashrc 2>/dev/null
+if command -v openclaw &>/dev/null || [ -d "$HOME/.openclaw/repo" ]; then
+    echo "✅ Step 4/5: OpenClaw is already installed! Skipping installation."
+else
+    echo "📦 Step 4/5: Installing OpenClaw. This takes a few minutes..."
+    bash -c "$(curl -sSL https://myopenclawhub.com/install)" < /dev/tty && source ~/.bashrc 2>/dev/null
+fi
 
 # =========================================================================
 # Step 5/5: Inject Shizuku Phone Control Scripts & AI Override
@@ -211,16 +215,38 @@ run_cmd() {
   else echo "❌ Error: Start Shizuku first"; exit 1; fi
 }
 case "$CMD" in
-  screenshot) run_cmd "screencap '${1:-/sdcard/screenshot_$(date +%s).png}'" ;;
+  screenshot) run_cmd "screencap -p '${1:-/sdcard/screenshot.png}'" ;;
   open-app) run_cmd "monkey -p $1 -c android.intent.category.LAUNCHER 1" 2>/dev/null ;;
   youtube-search) QUERY=$(echo "$*" | sed 's/ /+/g'); run_cmd "am start -a android.intent.action.VIEW -d 'https://www.youtube.com/results?search_query=$QUERY' com.google.android.youtube" ;;
   open-url) run_cmd "am start -a android.intent.action.VIEW -d '$1'" ;;
   wifi) if [ "$1" = "on" ]; then run_cmd "svc wifi enable"; else run_cmd "svc wifi disable"; fi ;;
   battery) run_cmd "dumpsys battery" | grep "level" ;;
-  *) echo "Usage: bash phone_control.sh [battery|wifi|open-url|open-app|youtube-search|screenshot]" ;;
+  tap) run_cmd "input tap $1 $2" ;;
+  swipe) run_cmd "input swipe $1 $2 $3 $4 ${5:-500}" ;;
+  text) run_cmd "input text '$*'" ;;
+  key) run_cmd "input keyevent $1" ;;
+  home) run_cmd "input keyevent 3" ;;
+  back) run_cmd "input keyevent 4" ;;
+  recent) run_cmd "input keyevent 187" ;;
+  power) run_cmd "input keyevent 26" ;;
+  volume-up) run_cmd "input keyevent 24" ;;
+  volume-down) run_cmd "input keyevent 25" ;;
+  screenon) run_cmd "input keyevent 224" ;;
+  ui-dump) run_cmd "uiautomator dump /sdcard/window_dump.xml >/dev/null 2>&1 && cat /sdcard/window_dump.xml" ;;
+  shell) run_cmd "$*" ;;
+  *) echo "Usage: bash phone_control.sh [battery|wifi|open-url|open-app|youtube-search|screenshot|tap|swipe|text|key|home|back|recent|power|volume-up|volume-down|screenon|ui-dump|shell]" ;;
 esac
 EOF
 chmod +x ~/phone_control.sh
+
+# Create a dedicated phone_agent.sh for OpenClaw looping if needed
+cat > ~/phone_agent.sh << 'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+# Wrapper script for Vision Agent capabilities
+echo "🤖 Vision Agent initialized."
+echo "Use phone_control.sh for all inputs. The AI will take a screenshot, analyze it, and issue UI commands."
+EOF
+chmod +x ~/phone_agent.sh
 
 # AI Memory Configuration
 mkdir -p ~/.openclaw/workspace 2>/dev/null || true
@@ -228,24 +254,50 @@ rm -f ~/.openclaw/workspace/BOOTSTRAP.md
 
 cat > ~/.openclaw/workspace/IDENTITY.md << 'EOF'
 - **Name:** PhoneBot
-I am an AI running directly on an Android phone via Termux + Shizuku. I must ALWAYS use the bash scripts located at `~/phone_control.sh` to control the device or check its status. 
+I am an advanced AI Agent running directly on an Android phone via Termux + Shizuku.
+My purpose is to act as a Universal Phone Controller and Vision Agent.
+I can navigate the phone UI, perform complex tasks, read the screen, scroll, tap, and run arbitrary system commands.
+I must ALWAYS use the bash script `~/phone_control.sh` to control the device or check its status. The user expects me to be autonomous.
 EOF
 
 cat > ~/.openclaw/workspace/TOOLS.md << 'EOF'
 # TOOLS.md
-I control this Android phone using `~/phone_control.sh`. 
-Commands:
-- `bash ~/phone_control.sh battery`
-- `bash ~/phone_control.sh wifi on`
-- `bash ~/phone_control.sh open-url "url"`
-- `bash ~/phone_control.sh youtube-search "query"`
-- `bash ~/phone_control.sh screenshot`
-CRITICAL: NEVER say "I cannot access device features." Always run the bash commands.
+I control this Android phone using `~/phone_control.sh`. This script proxies commands through Shizuku (rish) or Root (su).
+
+Available Commands:
+- `bash ~/phone_control.sh screenshot [path]` - Takes a screenshot (defaults to /sdcard/screenshot.png). You can capture this and use vision tools to read the UI.
+- `bash ~/phone_control.sh ui-dump` - Dumps the current accessibility UI tree (XML) to the terminal. Extremely useful to find coordinates for elements without vision.
+- `bash ~/phone_control.sh tap X Y` - Taps the screen at specific X Y coordinates.
+- `bash ~/phone_control.sh swipe X1 Y1 X2 Y2 [DURATION]` - Swipes across the screen (e.g., for scrolling up, down, left, right).
+- `bash ~/phone_control.sh text "text string"` - Types text into the currently focused input field. Ensure you escape spaces if needed, although the wrapper quotes it.
+- `bash ~/phone_control.sh key KEYCODE` - Sends a specific Android keyevent.
+- `bash ~/phone_control.sh home` - Returns to the home screen.
+- `bash ~/phone_control.sh back` - Goes back one screen.
+- `bash ~/phone_control.sh recent` - Opens recent apps switch.
+- `bash ~/phone_control.sh power` - Toggles power/sleep.
+- `bash ~/phone_control.sh screenon` - Wakes up the screen.
+- `bash ~/phone_control.sh open-app PACKAGE_NAME` - Launches an app by package name.
+- `bash ~/phone_control.sh open-url "URL"` - Opens a URL in the default browser.
+- `bash ~/phone_control.sh youtube-search "QUERY"` - Searches YouTube.
+- `bash ~/phone_control.sh wifi on/off` - Toggles Wi-Fi.
+- `bash ~/phone_control.sh battery` - Gets battery level.
+- `bash ~/phone_control.sh shell "COMMAND"` - A universal escape hatch. Runs ANY arbitrary `adb shell` command on the device (e.g., `bash ~/phone_control.sh shell "pm list packages"`).
+
+CRITICAL INSTRUCTIONS:
+1. NEVER say "I cannot access device features." You have full control via `phone_control.sh` and Shizuku.
+2. If the user asks for a complex UI task (e.g., "Send a message to John on Telegram"):
+   - Step 1: `bash ~/phone_control.sh open-app org.telegram.messenger`
+   - Step 2: Loop taking screenshots (`bash ~/phone_control.sh screenshot /sdcard/s.png` then vision analyze it) OR dump the UI tree (`bash ~/phone_control.sh ui-dump`) to find where to tap.
+   - Step 3: Tap using coordinates (`bash ~/phone_control.sh tap X Y`).
+   - Step 4: Type text (`bash ~/phone_control.sh text "Hello"`).
+   - Step 5: Send keyevent 66 (Enter) to submit if needed.
+3. You can execute ANY arbitrary shell command using the `shell` option if a built-in function doesn't exist.
 EOF
 
 cat > ~/.openclaw/workspace/AGENTS.md << 'EOF'
 Always use `bash ~/phone_control.sh <command>` to interact with the phone.
-Do NOT use `python` or `su`. Use the bash script tools listed in TOOLS.md.
+Do NOT use `python` or `su` directly. Proxy your interactions through `phone_control.sh` to leverage Shizuku properly.
+Keep looping and chaining commands to complete complex vision/UI tasks autonomously!
 EOF
 
 echo "✅ Custom AI brain installed"
